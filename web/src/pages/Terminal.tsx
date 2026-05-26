@@ -74,7 +74,7 @@ async function spawnShell(cols: number, rows: number, cwd?: string): Promise<num
     cols,
     rows,
     cwd: cwd || null,
-    env: {},
+    env: { TERM: 'xterm-256color' },
     encoding: null,
     handleFlowControl: null,
     flowControlPause: null,
@@ -158,8 +158,12 @@ function createXTerm(container: HTMLElement) {
   term.loadAddon(unicode11);
 
   term.open(container);
-  fit.fit();
-  term.focus();
+  // Only fit/focus if the container is actually laid out
+  // (hidden containers report 0 dimensions and break sizing)
+  if (container.offsetParent !== null) {
+    fit.fit();
+    term.focus();
+  }
   term.unicode.activeVersion = '11';
   term.onBell(() => playBell());
 
@@ -232,16 +236,25 @@ export default class TerminalManager {
 
   constructor(root: HTMLElement) {
     this.root = root;
-    this.root.className = 'flex flex-col h-full w-full bg-background';
+    this.root.className = 'flex flex-row h-full w-full bg-background';
 
+    // Left sidebar — vertical tabs
     this.tabsBar = document.createElement('div');
-    this.tabsBar.className = 'flex items-center w-full px-3 shrink-0 h-9 gap-1';
+    this.tabsBar.className = 'flex flex-col items-center w-12 shrink-0 py-2 gap-1.5 border-r border-border/50';
+
+    // Right content area — flex column with search + terminal
+    const contentArea = document.createElement('div');
+    contentArea.className = 'flex flex-col flex-1 min-h-0 min-w-0';
 
     this.sessionsContainer = document.createElement('div');
-    this.sessionsContainer.className = 'flex-1 relative min-h-0 w-full';
+    this.sessionsContainer.className = 'flex-1 relative min-h-0 min-w-0';
 
+    contentArea.appendChild(this.sessionsContainer);
     this.root.appendChild(this.tabsBar);
-    this.root.appendChild(this.sessionsContainer);
+    this.root.appendChild(contentArea);
+
+    // Store ref for search bar insertion
+    (this as any)._contentArea = contentArea;
 
     this._keydownHandler = (e: KeyboardEvent) => this.onKeyDown(e);
     this._resizeHandler = () => this.onWindowResize();
@@ -378,13 +391,25 @@ export default class TerminalManager {
     this.activeId = id;
     const s = this.sessions.find(x => x.id === id);
     if (s) {
-      requestAnimationFrame(() => { s.fit.fit(); s.term.focus(); });
+      // Double rAF + setTimeout gives the browser time to reflow after display:block
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            s.fit.fit();
+            s.term.refresh(0, s.term.rows - 1);
+            if (s.pid !== null && !s.dead) {
+              invoke('plugin:pty|resize', { pid: s.pid, cols: s.term.cols, rows: s.term.rows }).catch(() => {});
+            }
+            s.term.focus();
+          }, 0);
+        });
+      });
     }
     this.renderTabs();
   }
 
   /* ================================================================ */
-  /*  Tabs rendering                                                  */
+  /*  Tabs rendering — vertical sidebar                               */
   /* ================================================================ */
 
   private renderTabs() {
@@ -393,26 +418,30 @@ export default class TerminalManager {
     for (const s of this.sessions) {
       const btn = document.createElement('button');
       const isActive = s.id === this.activeId;
-      btn.className = `group flex items-center gap-1.5 pl-3 pr-1.5 h-7 rounded-md text-[11px] font-medium transition-all select-none ${
+      const initial = s.name.charAt(0).toUpperCase();
+      btn.className = `group relative flex items-center justify-center w-8 h-8 rounded-md text-[10px] font-semibold transition-all select-none ${
         isActive
           ? 'text-foreground bg-background/50'
           : s.dead
             ? 'text-destructive/50 hover:text-destructive/80 hover:bg-background/20'
             : 'text-muted-foreground/60 hover:text-foreground hover:bg-background/20'
       }`;
+      btn.title = s.name;
+
+      if (isActive) {
+        const indicator = document.createElement('div');
+        indicator.className = 'absolute left-0 top-1 bottom-1 w-[2px] rounded-full bg-primary';
+        indicator.style.position = 'absolute';
+        btn.appendChild(indicator);
+      }
 
       const label = document.createElement('span');
-      label.className = 'truncate max-w-[120px]';
-      label.textContent = s.name;
+      label.textContent = initial;
       btn.appendChild(label);
 
       const close = document.createElement('span');
-      close.className = `flex items-center justify-center size-4 rounded-full ml-0.5 transition-all active:scale-[0.96] ${
-        isActive
-          ? 'opacity-60 hover:opacity-100 hover:text-destructive hover:bg-destructive/10'
-          : 'opacity-0 group-hover:opacity-70 hover:opacity-100 hover:text-destructive hover:bg-destructive/10'
-      }`;
-      close.innerHTML = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+      close.className = `absolute -top-0.5 -right-0.5 flex items-center justify-center size-3 rounded-full bg-destructive text-white text-[7px] opacity-0 group-hover:opacity-100 transition-opacity`;
+      close.innerHTML = '×';
       close.addEventListener('click', (e) => { e.stopPropagation(); this.closeSession(s.id); });
       btn.appendChild(close);
 
@@ -425,26 +454,26 @@ export default class TerminalManager {
       this.tabsBar.appendChild(btn);
     }
 
+    /* Spacer */
+    const spacer = document.createElement('div');
+    spacer.className = 'flex-1 min-h-0';
+    this.tabsBar.appendChild(spacer);
+
     /* New tab button */
     const addBtn = document.createElement('button');
-    addBtn.className = 'flex items-center justify-center size-6 rounded-md hover:bg-background/30 text-muted-foreground/60 hover:text-foreground transition-all active:scale-[0.96]';
+    addBtn.className = 'flex items-center justify-center size-8 rounded-md hover:bg-background/30 text-muted-foreground/60 hover:text-foreground transition-all active:scale-[0.96]';
     addBtn.title = 'New Tab (Ctrl+T)';
-    addBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+    addBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
     addBtn.addEventListener('click', () => {
       this.createSession().then(s => this.activateSession(s.id));
     });
     this.tabsBar.appendChild(addBtn);
 
-    /* Spacer */
-    const spacer = document.createElement('div');
-    spacer.className = 'flex-1';
-    this.tabsBar.appendChild(spacer);
-
     /* Search toggle */
     const searchBtn = document.createElement('button');
-    searchBtn.className = `flex items-center justify-center size-6 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-background/30 transition-all active:scale-[0.96] ${this.searchOpen ? 'bg-background/30 text-foreground' : ''}`;
+    searchBtn.className = `flex items-center justify-center size-8 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-background/30 transition-all active:scale-[0.96] ${this.searchOpen ? 'bg-background/30 text-foreground' : ''}`;
     searchBtn.title = 'Search (Ctrl+F)';
-    searchBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
+    searchBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
     searchBtn.addEventListener('click', () => this.toggleSearch());
     this.tabsBar.appendChild(searchBtn);
   }
@@ -503,7 +532,8 @@ export default class TerminalManager {
     const closeBtn = bar.querySelector('button')!;
     closeBtn.addEventListener('click', () => this.toggleSearch());
 
-    this.root.insertBefore(bar, this.sessionsContainer);
+    const contentArea = (this as any)._contentArea as HTMLElement;
+    contentArea.insertBefore(bar, this.sessionsContainer);
     this.searchBar = bar;
   }
 
