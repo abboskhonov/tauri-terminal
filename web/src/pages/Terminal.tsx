@@ -227,6 +227,7 @@ export default class TerminalManager {
   /* Event handlers (stored for cleanup) */
   private _keydownHandler: (e: KeyboardEvent) => void;
   private _resizeHandler: () => void;
+  private _resizeObserver: ResizeObserver | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -246,12 +247,20 @@ export default class TerminalManager {
     window.addEventListener('keydown', this._keydownHandler, true);
     window.addEventListener('resize', this._resizeHandler);
 
+    // ResizeObserver catches container size changes even when window resize event fires late
+    this._resizeObserver = new ResizeObserver(() => this.onWindowResize());
+    this._resizeObserver.observe(this.sessionsContainer);
+
     getUserShell().then(shell => this.createSession(shellName(shell)));
+
+    // Force refit after a short delay to handle initial render race conditions
+    setTimeout(() => this.onWindowResize(), 100);
   }
 
   destroy() {
     window.removeEventListener('keydown', this._keydownHandler, true);
     window.removeEventListener('resize', this._resizeHandler);
+    this._resizeObserver?.disconnect();
     for (const s of this.sessions) {
       if (s.pid !== null) invoke('plugin:pty|kill', { pid: s.pid }).catch(() => {});
       (s.term as any).__cleanup?.();
