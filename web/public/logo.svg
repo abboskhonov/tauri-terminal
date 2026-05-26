@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#181412"/>
+  <g transform="translate(256, 256)">
+    <!-- Outer diamond frame -->
+    <path d="M 0 -120 L 104 0 L 0 120 L -104 0 Z" 
+          fill="none" 
+          stroke="#d97757" 
+          stroke-width="28" 
+          stroke-linejoin="round"/>
+    <!-- Inner arrow / prompt -->
+    <path d="M -50 -20 L 10 20 L -50 60" 
+          fill="none" 
+          stroke="#e8e2dc" 
+          stroke-width="28" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    <!-- The dot -->
+    <circle cx="50" cy="20" r="22" fill="#d97757"/>
+  </g>
+</svg>
