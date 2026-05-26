@@ -67,7 +67,7 @@ export default function TitleBar() {
   const handleClose = () => getCurrentWindow().close();
 
   return (
-    <div class="flex items-center h-9 shrink-0 select-none border-b border-border">
+    <div class="flex items-center h-9 shrink-0 select-none">
       {/* Drag region — NO data-tauri-drag-region. We handle drag + dbl-click manually. */}
       <div
         ref={dragRegionRef}
