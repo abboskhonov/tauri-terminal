@@ -244,7 +244,12 @@ export default function TerminalPage() {
             closeSession(session.id);
             break;
           }
-          if (data.length > 0) term.write(data);
+          if (data.length > 0) {
+            term.write(data);
+          } else {
+            // Throttle to avoid busy-wait when PTY returns empty
+            await new Promise(r => setTimeout(r, 16));
+          }
         }
       })();
 

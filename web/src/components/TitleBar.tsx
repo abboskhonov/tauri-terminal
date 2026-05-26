@@ -1,30 +1,78 @@
 import { createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-const appWindow = getCurrentWindow();
-
 export default function TitleBar() {
   const [isMaximized, setIsMaximized] = createSignal(false);
+  let dragRegionRef: HTMLDivElement | undefined;
 
-  onMount(async () => {
-    setIsMaximized(await appWindow.isMaximized());
+  onMount(() => {
+    const appWindow = getCurrentWindow();
+    let unlistenResize: (() => void) | undefined;
+    let unlistenFocus: (() => void) | undefined;
 
-    const unlisten = await appWindow.listen('tauri://resize', async () => {
-      setIsMaximized(await appWindow.isMaximized());
-    });
+    const sync = async () => {
+      try {
+        setIsMaximized(await appWindow.isMaximized());
+      } catch {
+        // window closing
+      }
+    };
+    sync();
+
+    appWindow.onResized(() => sync()).then((fn) => { unlistenResize = fn; });
+    appWindow.onFocusChanged(() => sync()).then((fn) => { unlistenFocus = fn; });
 
     onCleanup(() => {
-      unlisten();
+      unlistenResize?.();
+      unlistenFocus?.();
     });
   });
 
+  const handleMouseDown = async (e: MouseEvent) => {
+    if (e.buttons !== 1) return; // only left button
+    const appWindow = getCurrentWindow();
+
+    if (e.detail === 2) {
+      // Double-click: toggle maximize explicitly (not toggleMaximize to avoid sync bugs)
+      e.preventDefault();
+      const maximized = await appWindow.isMaximized();
+      if (maximized) {
+        await appWindow.unmaximize();
+        setIsMaximized(false);
+      } else {
+        await appWindow.maximize();
+        setIsMaximized(true);
+      }
+      return;
+    }
+
+    // Single click: start dragging the window
+    await appWindow.startDragging();
+  };
+
+  const handleMinimize = () => getCurrentWindow().minimize();
+
+  const handleMaximize = async () => {
+    const appWindow = getCurrentWindow();
+    const maximized = await appWindow.isMaximized();
+    if (maximized) {
+      await appWindow.unmaximize();
+      setIsMaximized(false);
+    } else {
+      await appWindow.maximize();
+      setIsMaximized(true);
+    }
+  };
+
+  const handleClose = () => getCurrentWindow().close();
+
   return (
     <div class="flex items-center h-9 shrink-0 select-none border-b border-border">
-      {/* Draggable region: title + center spacer, double-click to toggle maximize */}
+      {/* Drag region — NO data-tauri-drag-region. We handle drag + dbl-click manually. */}
       <div
-        class="flex flex-1 items-center h-full"
-        data-tauri-drag-region
-        onDblClick={() => appWindow.toggleMaximize()}
+        ref={dragRegionRef}
+        class="flex flex-1 items-center h-full cursor-default"
+        onMouseDown={handleMouseDown}
       >
         <div class="flex items-center gap-2 px-3">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-foreground">
@@ -35,10 +83,10 @@ export default function TitleBar() {
         </div>
       </div>
 
-      {/* Window controls — completely outside the drag region */}
+      {/* Window controls */}
       <div class="flex items-center h-full">
         <button
-          onClick={() => appWindow.minimize()}
+          onClick={handleMinimize}
           class="flex items-center justify-center size-9 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           title="Minimize"
         >
@@ -48,7 +96,7 @@ export default function TitleBar() {
         </button>
 
         <button
-          onClick={() => appWindow.toggleMaximize()}
+          onClick={handleMaximize}
           class="flex items-center justify-center size-9 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           title={isMaximized() ? 'Restore' : 'Maximize'}
         >
@@ -65,7 +113,7 @@ export default function TitleBar() {
         </button>
 
         <button
-          onClick={() => appWindow.close()}
+          onClick={handleClose}
           class="flex items-center justify-center size-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
           title="Close"
         >
