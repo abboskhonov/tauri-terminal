@@ -12,9 +12,9 @@ export default function App() {
   });
 
   return (
-    <div class="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground font-sans text-sm">
+    <div class="flex flex-col h-full w-full overflow-hidden bg-background text-foreground font-sans text-sm">
       <TitleBar />
-      <div ref={terminalRef} class="flex-1 min-h-0" />
+      <div ref={terminalRef} class="flex-1 min-h-0 w-full" />
     </div>
   );
 }
