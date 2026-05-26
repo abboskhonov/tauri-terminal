@@ -23,10 +23,15 @@ export default function TitleBar() {
     });
   });
 
+  let dragTimer: ReturnType<typeof setTimeout> | null = null;
+
   const handleMouseDown = async (e: MouseEvent) => {
     if (e.buttons !== 1) return;
     const w = getCurrentWindow();
+
     if (e.detail === 2) {
+      // Cancel the pending drag from the first click
+      if (dragTimer) { clearTimeout(dragTimer); dragTimer = null; }
       e.preventDefault();
       const maximized = await w.isMaximized();
       if (maximized) {
@@ -38,7 +43,13 @@ export default function TitleBar() {
       }
       return;
     }
-    await w.startDragging();
+
+    // First click: wait 300ms to see if a double-click follows
+    // before starting the OS drag (which would intercept the second click)
+    dragTimer = setTimeout(async () => {
+      dragTimer = null;
+      await w.startDragging();
+    }, 300);
   };
 
   const handleMinimize = () => getCurrentWindow().minimize();
