@@ -21,13 +21,14 @@ interface Session {
   pid: number | null;
   active: boolean;
   dead: boolean;
+  cleanup?: () => void;
+  cleanupResize?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Globals                                                            */
 /* ------------------------------------------------------------------ */
 
-let nextId = 1;
 let suggestedRendererType: 'webgl' | 'dom' | undefined;
 let userShell = '';
 let audioCtx: AudioContext | null = null;
@@ -178,9 +179,10 @@ function createXTerm(container: HTMLElement) {
     }
   });
 
+  let handleCopy: ((event: ClipboardEvent) => void) | null = null;
   const el = term.element;
   if (el) {
-    const handleCopy = (event: ClipboardEvent) => {
+    handleCopy = (event: ClipboardEvent) => {
       const selection = term.getSelection();
       if (!selection) return;
       const trimmed = selection.split('\n').map(l => l.trimEnd()).join('\n');
@@ -192,17 +194,16 @@ function createXTerm(container: HTMLElement) {
       navigator.clipboard?.writeText(trimmed).catch(() => {});
     };
     el.addEventListener('copy', handleCopy);
-    (term as any).__cleanupCopy = () => el.removeEventListener('copy', handleCopy);
   }
 
-  (term as any).__cleanup = () => {
+  const cleanup = () => {
     disposed = true;
     cancelAnimationFrame(rafId);
     try { webgl?.dispose(); } catch {}
-    (term as any).__cleanupCopy?.();
+    if (handleCopy && el) el.removeEventListener('copy', handleCopy);
   };
 
-  return { term, fit, search };
+  return { term, fit, search, cleanup };
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,7 +264,7 @@ export default class TerminalManager {
     this._resizeObserver?.disconnect();
     for (const s of this.sessions) {
       if (s.pid !== null) invoke('plugin:pty|kill', { pid: s.pid }).catch(() => {});
-      (s.term as any).__cleanup?.();
+      s.cleanup?.();
       s.term.dispose();
     }
     this.sessions = [];
@@ -281,7 +282,7 @@ export default class TerminalManager {
     container.style.display = 'none';
     this.sessionsContainer.appendChild(container);
 
-    const { term, fit, search } = createXTerm(container);
+    const { term, fit, search, cleanup } = createXTerm(container);
 
     const session: Session = {
       id,
@@ -293,6 +294,7 @@ export default class TerminalManager {
       pid: null,
       active: false,
       dead: false,
+      cleanup,
     };
 
     this.sessions.push(session);
@@ -314,9 +316,8 @@ export default class TerminalManager {
       });
 
       /* PTY read loop */
-      let running = true;
       (async () => {
-        while (running && session.pid !== null && !session.dead) {
+        while (session.pid !== null && !session.dead) {
           const data = await readPty(session.pid);
           if (data === null) {
             session.dead = true;
@@ -330,23 +331,6 @@ export default class TerminalManager {
           }
         }
       })();
-
-      /* Resize */
-      let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-      const onResize = () => {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-          if (session.pid !== null && !session.dead) {
-            fit.fit();
-            invoke('plugin:pty|resize', { pid: session.pid, cols: term.cols, rows: term.rows }).catch(() => {});
-          }
-        }, 100);
-      };
-      window.addEventListener('resize', onResize);
-      (session as any).__cleanupResize = () => {
-        window.removeEventListener('resize', onResize);
-        if (resizeTimer) clearTimeout(resizeTimer);
-      };
 
       if (!this.activeId) {
         this.activateSession(id);
@@ -366,8 +350,7 @@ export default class TerminalManager {
     const target = this.sessions[idx];
     if (target.pid !== null) invoke('plugin:pty|kill', { pid: target.pid }).catch(() => {});
     target.dead = true;
-    (target.term as any).__cleanup?.();
-    (target as any).__cleanupResize?.();
+    target.cleanup?.();
     target.term.dispose();
     target.container.remove();
 

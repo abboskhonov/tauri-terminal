@@ -25,21 +25,33 @@ export default function TitleBar() {
 
   const handleMouseDown = async (e: MouseEvent) => {
     if (e.buttons !== 1) return;
-    const appWindow = getCurrentWindow();
+    const w = getCurrentWindow();
     if (e.detail === 2) {
       e.preventDefault();
-      const maximized = await appWindow.isMaximized();
-      maximized ? (await appWindow.unmaximize(), setIsMaximized(false)) : (await appWindow.maximize(), setIsMaximized(true));
+      const maximized = await w.isMaximized();
+      if (maximized) {
+        await w.unmaximize();
+        setIsMaximized(false);
+      } else {
+        await w.maximize();
+        setIsMaximized(true);
+      }
       return;
     }
-    await appWindow.startDragging();
+    await w.startDragging();
   };
 
   const handleMinimize = () => getCurrentWindow().minimize();
   const handleMaximize = async () => {
     const w = getCurrentWindow();
     const m = await w.isMaximized();
-    m ? (await w.unmaximize(), setIsMaximized(false)) : (await w.maximize(), setIsMaximized(true));
+    if (m) {
+      await w.unmaximize();
+      setIsMaximized(false);
+    } else {
+      await w.maximize();
+      setIsMaximized(true);
+    }
   };
   const handleClose = () => getCurrentWindow().close();
 
