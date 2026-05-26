@@ -233,7 +233,7 @@ export default class TerminalManager {
     this.root.className = 'flex flex-col h-full w-full bg-background';
 
     this.tabsBar = document.createElement('div');
-    this.tabsBar.className = 'flex items-center w-full border-b border-border px-1 shrink-0 h-7';
+    this.tabsBar.className = 'flex items-center w-full px-3 shrink-0 h-9 gap-1';
 
     this.sessionsContainer = document.createElement('div');
     this.sessionsContainer.className = 'flex-1 relative min-h-0 w-full';
@@ -401,22 +401,26 @@ export default class TerminalManager {
     for (const s of this.sessions) {
       const btn = document.createElement('button');
       const isActive = s.id === this.activeId;
-      btn.className = `group flex items-center gap-1.5 px-2.5 h-full text-[11px] transition-colors border-t-2 ${
+      btn.className = `group flex items-center gap-1.5 pl-3 pr-1.5 h-7 rounded-md text-[11px] font-medium transition-all select-none ${
         isActive
-          ? 'bg-background text-foreground border-primary'
+          ? 'text-foreground bg-background/50'
           : s.dead
-            ? 'text-destructive/60 hover:text-destructive border-transparent'
-            : 'text-muted-foreground hover:text-foreground border-transparent'
+            ? 'text-destructive/50 hover:text-destructive/80 hover:bg-background/20'
+            : 'text-muted-foreground/60 hover:text-foreground hover:bg-background/20'
       }`;
 
       const label = document.createElement('span');
-      label.className = 'truncate max-w-[100px]';
+      label.className = 'truncate max-w-[120px]';
       label.textContent = s.name;
       btn.appendChild(label);
 
       const close = document.createElement('span');
-      close.className = 'rounded p-0.5 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity';
-      close.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+      close.className = `flex items-center justify-center size-4 rounded-full ml-0.5 transition-all active:scale-[0.96] ${
+        isActive
+          ? 'opacity-60 hover:opacity-100 hover:text-destructive hover:bg-destructive/10'
+          : 'opacity-0 group-hover:opacity-70 hover:opacity-100 hover:text-destructive hover:bg-destructive/10'
+      }`;
+      close.innerHTML = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
       close.addEventListener('click', (e) => { e.stopPropagation(); this.closeSession(s.id); });
       btn.appendChild(close);
 
@@ -431,9 +435,9 @@ export default class TerminalManager {
 
     /* New tab button */
     const addBtn = document.createElement('button');
-    addBtn.className = 'flex items-center justify-center size-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors mx-1';
+    addBtn.className = 'flex items-center justify-center size-6 rounded-md hover:bg-background/30 text-muted-foreground/60 hover:text-foreground transition-all active:scale-[0.96]';
     addBtn.title = 'New Tab (Ctrl+T)';
-    addBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
+    addBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
     addBtn.addEventListener('click', () => {
       this.createSession().then(s => this.activateSession(s.id));
     });
@@ -446,9 +450,9 @@ export default class TerminalManager {
 
     /* Search toggle */
     const searchBtn = document.createElement('button');
-    searchBtn.className = `flex items-center justify-center size-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors ${this.searchOpen ? 'bg-muted text-foreground' : ''}`;
+    searchBtn.className = `flex items-center justify-center size-6 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-background/30 transition-all active:scale-[0.96] ${this.searchOpen ? 'bg-background/30 text-foreground' : ''}`;
     searchBtn.title = 'Search (Ctrl+F)';
-    searchBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
+    searchBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
     searchBtn.addEventListener('click', () => this.toggleSearch());
     this.tabsBar.appendChild(searchBtn);
   }
@@ -475,7 +479,7 @@ export default class TerminalManager {
   private buildSearchBar() {
     if (this.searchBar) return;
     const bar = document.createElement('div');
-    bar.className = 'flex items-center gap-2 border-b border-border bg-muted px-3 py-1 shrink-0';
+    bar.className = 'flex items-center gap-2 bg-background/30 px-3 py-2 shrink-0';
     bar.innerHTML = `
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="text" placeholder="Search..." class="bg-transparent text-[12px] text-foreground outline-none flex-1 placeholder:text-muted-foreground" />
